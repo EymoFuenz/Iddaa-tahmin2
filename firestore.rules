@@ -1,0 +1,116 @@
+/**
+ * Firebase Firestore Rules
+ * Security rules for database access control
+ * Version: 2.2 - Production ready with proper authentication
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Function to validate team data (flexible for API imports)
+    function isValidTeamData(data) {
+      // Required: name, country
+      // Optional: code, logo, founded, apiId, marketValue, recentMatches, createdAt, updatedAt
+      return (data.name is string && data.country is string) &&
+             (!('code' in data) || data.code is string) &&
+             (!('logo' in data) || (data.logo is string || data.logo == null)) &&
+             (!('founded' in data) || data.founded is int) &&
+             (!('apiId' in data) || (data.apiId is int || data.apiId == null)) &&
+             (!('marketValue' in data) || (data.marketValue is number || data.marketValue == null)) &&
+             (!('recentMatches' in data) || data.recentMatches is list) &&
+             (!('createdAt' in data) || (data.createdAt is string || data.createdAt is timestamp)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string || data.updatedAt is timestamp));
+    }
+
+    // Users collection - Secure access
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if request.auth.uid == userId || isAdmin();
+      allow create: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Teams collection - Public read, authenticated write
+    match /teams/{teamId} {
+      allow read: if true;  // Everyone can read teams (for predictions)
+      allow create: if isAuthenticated() && isValidTeamData(request.resource.data);
+      allow update: if isAuthenticated() && isValidTeamData(request.resource.data);
+      allow delete: if isAdmin();
+
+      // Teams sub-collections
+      match /stats/{statsDoc=**} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      match /recentMatches/{matchDoc=**} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      match /comparison/{compDoc=**} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+    }
+
+    // Matches collection
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Predictions collection
+    match /predictions/{predictionId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+    }
+
+    // User predictions history
+    match /users/{userId}/predictions/{predictionId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Standings collection
+    match /standings/{standingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Season data
+    match /seasons/{seasonId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Configuration collection
+    match /config/{configDoc=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Catch-all rule for undefined paths
+    match /{document=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}
