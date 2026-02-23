@@ -5,6 +5,9 @@ declare global {
     readonly VITE_API_BASE_URL: string;
     readonly VITE_BACKEND_URL: string;
     readonly VITE_FOOTBALL_API_KEY?: string;
+    readonly VITE_FOOTBALL_API_BASE_URL?: string;
+    readonly VITE_FOOTBALL_USE_APISPORTS?: string;
+    readonly VITE_SUPER_LIG_SEASON?: string;
     readonly VITE_FIREBASE_API_KEY: string;
     readonly VITE_FIREBASE_AUTH_DOMAIN: string;
     readonly VITE_FIREBASE_PROJECT_ID: string;

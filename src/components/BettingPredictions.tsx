@@ -13,31 +13,36 @@ interface BettingPredictionsProps {
   awayTeam: string;
 }
 
+function safePercent(value: number | undefined): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 0;
+}
+
 export function BettingPredictions({ probabilities, homeTeam, awayTeam }: BettingPredictionsProps) {
   const bets = [
     {
       title: '1X2 (Sonuç )',
       items: [
-        { label: `${homeTeam} Kazanır`, value: probabilities.homeWin, color: 'text-blue-400' },
-        { label: 'Beraberlik', value: probabilities.draw, color: 'text-gray-400' },
-        { label: `${awayTeam} Kazanır`, value: probabilities.awayWin, color: 'text-red-400' },
+        { label: `${homeTeam} Kazanır`, value: safePercent(probabilities.homeWin), color: 'text-blue-400' },
+        { label: 'Beraberlik', value: safePercent(probabilities.draw), color: 'text-gray-400' },
+        { label: `${awayTeam} Kazanır`, value: safePercent(probabilities.awayWin), color: 'text-red-400' },
       ],
     },
     {
       title: 'Toplam Gol',
       items: [
-        { label: 'Over 0.5', value: probabilities.over05, color: 'text-green-400' },
-        { label: 'Over 1.5', value: probabilities.over15, color: 'text-green-400' },
-        { label: 'Over 2.5', value: probabilities.over25, color: 'text-blue-400' },
-        { label: 'Over 3.5', value: probabilities.over35, color: 'text-yellow-400' },
+        { label: 'Over 0.5', value: safePercent(probabilities.over05), color: 'text-green-400' },
+        { label: 'Over 1.5', value: safePercent(probabilities.over15), color: 'text-green-400' },
+        { label: 'Over 2.5', value: safePercent(probabilities.over25), color: 'text-blue-400' },
+        { label: 'Over 3.5', value: safePercent(probabilities.over35), color: 'text-yellow-400' },
       ],
     },
     {
       title: 'Özel Tahmini',
       items: [
-        { label: 'Her İki Takım Gol Atsa', value: probabilities.btts, color: 'text-purple-400' },
-        { label: 'Her İki Takım Gol + Over 2.5', value: probabilities.bttsAndOver25, color: 'text-pink-400' },
-        { label: '1-3 Gol Arası', value: probabilities.over1Under3, color: 'text-cyan-400' },
+        { label: 'Her İki Takım Gol Atsa', value: safePercent(probabilities.btts), color: 'text-purple-400' },
+        { label: 'Her İki Takım Gol + Over 2.5', value: safePercent(probabilities.bttsAndOver25), color: 'text-pink-400' },
+        { label: '1-3 Gol Arası', value: safePercent(probabilities.over1Under3), color: 'text-cyan-400' },
       ],
     },
   ];
@@ -73,7 +78,7 @@ export function BettingPredictions({ probabilities, homeTeam, awayTeam }: Bettin
                           ? 'bg-yellow-500'
                           : 'bg-red-500'
                       }`}
-                      style={{ width: `${item.value}%` }}
+                      style={{ width: `${Math.max(0, Math.min(100, item.value))}%` }}
                     />
                   </div>
                 </div>

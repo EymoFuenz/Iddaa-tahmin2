@@ -94,7 +94,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Season data
+    // Season data (yıl bazlı: seasonData/2024, seasonData/2025 – takımlar + maçlar)
+    match /seasonData/{seasonId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Takım sezon verisi (teamSeasonData/2024_123 – takım + o sezondaki maçları)
+    match /teamSeasonData/{docId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Eski seasons koleksiyonu (uyumluluk için)
     match /seasons/{seasonId} {
       allow read: if true;
       allow write: if isAdmin();

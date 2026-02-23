@@ -8,9 +8,15 @@ import axios, { AxiosInstance } from 'axios';
 import { Team, Match, FootballAPITeam, FootballAPIMatch } from '@/types';
 
 const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY;
-const API_BASE_URL = 'https://api-football-v3.p.rapidapi.com';
+// RapidAPI doğru adres: api-football-v1 + /v3 path. API-Sports: v3.football.api-sports.io
+const API_BASE_URL =
+  import.meta.env.VITE_FOOTBALL_API_BASE_URL ||
+  'https://api-football-v1.p.rapidapi.com/v3';
+const isApiSports =
+  API_BASE_URL.includes('api-sports.io') ||
+  !!import.meta.env.VITE_FOOTBALL_USE_APISPORTS;
 const SUPER_LIG_ID = 203; // Süper Lig league ID in API-Football
-const SUPER_LIG_SEASON = 2024;
+const SUPER_LIG_SEASON = Number(import.meta.env.VITE_SUPER_LIG_SEASON) || 2024;
 
 interface APIResponse<T> {
   results: number;
@@ -20,6 +26,10 @@ interface APIResponse<T> {
   };
   response: T[];
 }
+
+/** Maç bulunamayan takımlar için kısa süreli cache (sürekli istek engellemek için) */
+const EMPTY_MATCHES_TTL = 120_000; // 2 dakika
+const emptyMatchesCache = new Map<number, number>(); // teamId -> timestamp
 
 class FootballAPIService {
   private apiClient: AxiosInstance;
@@ -40,10 +50,12 @@ class FootballAPIService {
 
     this.apiClient = axios.create({
       baseURL: API_BASE_URL,
-      headers: {
-        'X-RapidAPI-Key': API_KEY,
-        'X-RapidAPI-Host': 'api-football-v3.p.rapidapi.com',
-      },
+      headers: isApiSports
+        ? { 'x-apisports-key': API_KEY }
+        : {
+            'X-RapidAPI-Key': API_KEY,
+            'X-RapidAPI-Host': 'api-football-v1.p.rapidapi.com',
+          },
       timeout: 30000,
     });
   }
@@ -140,13 +152,14 @@ class FootballAPIService {
   }
 
   /**
-   * Get all active teams in Süper Lig
+   * Get all active teams in Süper Lig (isteğe bağlı sezon)
    */
-  async getSuperLigTeams(): Promise<Team[]> {
+  async getSuperLigTeams(season?: number): Promise<Team[]> {
+    const year = season ?? SUPER_LIG_SEASON;
     try {
       const response = await this.makeRequest<APIResponse<FootballAPITeam>>(`/teams`, {
         league: SUPER_LIG_ID,
-        season: SUPER_LIG_SEASON,
+        season: year,
       });
 
       return response.response.map((teamData: FootballAPITeam) => ({
@@ -164,48 +177,116 @@ class FootballAPIService {
   }
 
   /**
+   * Ligdeki tüm biten maçları çek (belirli sezon) – Firebase'e kaydetmek için
+   */
+  async getLeagueFixtures(season: number): Promise<Match[]> {
+    try {
+      const response = await this.makeRequest<APIResponse<FootballAPIMatch>>(`/fixtures`, {
+        league: SUPER_LIG_ID,
+        season,
+        status: 'FT-AET-PEN',
+      });
+      const list = response?.response ?? [];
+      return list.map((data: FootballAPIMatch) => ({
+        id: data.fixture.id,
+        homeTeam: {
+          id: data.teams.home.id,
+          name: data.teams.home.name,
+          logo: data.teams.home.logo,
+          code: '',
+          founded: 0,
+          country: data.teams.home.country || 'Turkey',
+        },
+        awayTeam: {
+          id: data.teams.away.id,
+          name: data.teams.away.name,
+          logo: data.teams.away.logo,
+          code: '',
+          founded: 0,
+          country: data.teams.away.country || 'Turkey',
+        },
+        date: data.fixture.date,
+        status: 'finished' as const,
+        homeGoals: data.goals.home ?? 0,
+        awayGoals: data.goals.away ?? 0,
+        league: data.league.name || 'Süper Lig',
+        season: data.league.season,
+        round: parseInt(data.league.round?.replace(/\D/g, '') || '0'),
+        venue: data.venue?.name || '',
+      }));
+    } catch (error) {
+      console.error('Error fetching league fixtures:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get last N matches for a team
-   * Tries with Süper Lig parameters first, then without if that fails
+   * Doc: https://www.api-football.com/documentation-v3 - fixtures with status=FT-AET-PEN for completed
+   * Tries: (1) Süper Lig + completed, (2) any league + completed, (3) any league without status
    */
   async getTeamMatches(teamId: number, limit: number = 10): Promise<Match[]> {
-    try {
-      // First try with Süper Lig parameters
+    const now = Date.now();
+    const cachedEmpty = emptyMatchesCache.get(teamId);
+    if (cachedEmpty != null && now - cachedEmpty < EMPTY_MATCHES_TTL) {
+      return [];
+    }
+
+    const STATUS_FINISHED = 'FT-AET-PEN'; // biten maçlar (doc: completed matches)
+
+    const tryRequest = async (params: Record<string, number | string>): Promise<FootballAPIMatch[]> => {
       try {
-        const response = await this.makeRequest<APIResponse<FootballAPIMatch>>(`/fixtures`, {
-          team: teamId,
-          league: SUPER_LIG_ID,
-          season: SUPER_LIG_SEASON,
-          last: limit,
-        });
-
-        if (response.response && response.response.length > 0) {
-          return this.formatMatches(response.response, teamId);
-        }
-      } catch (leagueError) {
-        console.warn(`Süper Lig params failed for team ${teamId}, trying without league filter...`, leagueError);
+        const response = await this.makeRequest<APIResponse<FootballAPIMatch>>(`/fixtures`, params);
+        return response?.response ?? [];
+      } catch {
+        return [];
       }
+    };
 
-      // If Süper Lig search fails, try without league/season parameters
-      const response = await this.makeRequest<APIResponse<FootballAPIMatch>>(`/fixtures`, {
+    try {
+      // 1) Süper Lig, bu sezon, biten maçlar
+      let list = await tryRequest({
+        team: teamId,
+        league: SUPER_LIG_ID,
+        season: SUPER_LIG_SEASON,
+        last: limit,
+        status: STATUS_FINISHED,
+      });
+      if (list.length > 0) return this.formatMatches(list);
+
+      // 2) Lig/sezon filtresi yok, sadece takım + son N biten maç (farklı lig takımları için, örn. 645)
+      list = await tryRequest({
+        team: teamId,
+        last: limit,
+        status: STATUS_FINISHED,
+      });
+      if (list.length > 0) return this.formatMatches(list);
+
+      // 3) status olmadan dene (bazı planlarda farklı davranabilir)
+      list = await tryRequest({
         team: teamId,
         last: limit,
       });
+      if (list.length > 0) return this.formatMatches(list);
 
-      if (!response.response || response.response.length === 0) {
-        throw new Error(`No matches found for team ID ${teamId}`);
+      // Hata fırlatma: boş dizi dön ki sürekli istek atılmasın, UI "maç yok" göstersin
+      emptyMatchesCache.set(teamId, Date.now());
+      // Eski kayıtları temizle
+      for (const [id, ts] of emptyMatchesCache.entries()) {
+        if (now - ts > EMPTY_MATCHES_TTL) emptyMatchesCache.delete(id);
       }
-
-      return this.formatMatches(response.response, teamId);
+      console.warn(`Takım ID ${teamId} için maç bulunamadı (farklı lig veya henüz oynanmış maç yok).`);
+      return [];
     } catch (error) {
       console.error(`Error fetching matches for team ${teamId}:`, error);
-      throw error;
+      return [];
     }
   }
 
   /**
    * Helper function to format matches
    */
-  private formatMatches(matchData: FootballAPIMatch[], teamId: number): Match[] {
+  private formatMatches(matchData: FootballAPIMatch[]): Match[] {
     return matchData.map((data: FootballAPIMatch) => ({
       id: data.fixture.id,
       homeTeam: {
@@ -226,8 +307,8 @@ class FootballAPIService {
       },
       date: data.fixture.date,
       status: this.normalizeStatus(data.fixture.status),
-      homeGoals: data.goals.home,
-      awayGoals: data.goals.away,
+      homeGoals: data.goals.home ?? 0,
+      awayGoals: data.goals.away ?? 0,
       league: data.league.name || 'Unknown',
       season: data.league.season,
       round: parseInt(data.league.round?.replace(/\D/g, '') || '0'),
@@ -272,7 +353,8 @@ class FootballAPIService {
         to: toDate.toISOString().split('T')[0],
       });
 
-      return response.response.map((matchData: FootballAPIMatch) => ({
+      const list = response?.response ?? [];
+      return list.map((matchData: FootballAPIMatch) => ({
         id: matchData.fixture.id,
         homeTeam: {
           id: matchData.teams.home.id,
@@ -352,8 +434,8 @@ class FootballAPIService {
         },
         date: matchData.fixture.date,
         status: this.normalizeStatus(matchData.fixture.status),
-        homeGoals: matchData.goals.home,
-        awayGoals: matchData.goals.away,
+        homeGoals: matchData.goals.home ?? 0,
+        awayGoals: matchData.goals.away ?? 0,
         league: matchData.teams.home.id === teamId1 ? 'Süper Lig' : 'Other',
         season: matchData.league.season,
         round: 0,

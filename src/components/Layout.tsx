@@ -2,13 +2,23 @@
  * Header Component
  */
 
-import { Zap, Settings } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Zap, Settings, LogOut } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export function Header() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <header className="bg-gray-800 border-b border-gray-700 sticky top-0 z-50 shadow-lg">
       <div className="container py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3">
           <div className="bg-gradient-to-br from-sky-400 to-blue-600 rounded-lg p-2">
             <Zap className="w-6 h-6 text-white" />
           </div>
@@ -16,19 +26,33 @@ export function Header() {
             <h1 className="text-2xl font-bold text-white">⚽ Süper Lig Analytics</h1>
             <p className="text-xs text-gray-400">Maç Tahmin & İstatistik Platformu</p>
           </div>
-        </div>
+        </Link>
 
         <nav className="hidden md:flex items-center gap-6">
-          <a href="/" className="text-gray-300 hover:text-white transition">Anasayfa</a>
-          <a href="/teams" className="text-gray-300 hover:text-white transition">Takımlar</a>
-          <a href="/predictions" className="text-gray-300 hover:text-white transition">Tahminler</a>
-          <a href="/statistics" className="text-gray-300 hover:text-white transition">İstatistikler</a>
+          <Link to="/" className="text-gray-300 hover:text-white transition">Anasayfa</Link>
+          <Link to="/teams" className="text-gray-300 hover:text-white transition">Takımlar</Link>
+          <Link to="/predictions" className="text-gray-300 hover:text-white transition">Tahminler</Link>
         </nav>
 
-        <button className="btn btn-secondary btn-sm">
-          <Settings className="w-4 h-4" />
-          Ayarlar
-        </button>
+        <div className="flex items-center gap-3">
+          {user && (
+            <span className="text-sm text-gray-400 truncate max-w-[140px]" title={user.email ?? ''}>
+              {user.email}
+            </span>
+          )}
+          <button className="btn btn-secondary btn-sm" title="Ayarlar">
+            <Settings className="w-4 h-4" />
+            <span className="hidden sm:inline">Ayarlar</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="btn btn-outline btn-sm"
+            title="Çıkış yap"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Çıkış</span>
+          </button>
+        </div>
       </div>
     </header>
   );

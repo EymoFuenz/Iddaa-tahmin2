@@ -36,6 +36,24 @@ export interface Match {
   venue: string;
 }
 
+// Sezon verisi (Firebase seasonData) – yıl bazlı takım + maç listesi
+export interface SeasonData {
+  season: number;
+  leagueId: number;
+  teams: Team[];
+  matches: Match[];
+  fetchedAt: string; // ISO string
+}
+
+// Takım sezon verisi (Firebase teamSeasonData) – takım + o sezondaki maçları
+export interface TeamSeasonData {
+  season: number;
+  teamId: number;
+  team: Team;
+  matches: Match[];
+  fetchedAt: string;
+}
+
 // Team Statistics
 export interface TeamStats {
   teamId: number;
@@ -167,17 +185,18 @@ export interface FootballAPIMatch {
   };
   league: {
     season: number;
-    round: string;
+    round?: string;
+    name?: string;
   };
   teams: {
-    home: { id: number; name: string; logo: string };
-    away: { id: number; name: string; logo: string };
+    home: { id: number; name: string; logo: string; country?: string };
+    away: { id: number; name: string; logo: string; country?: string };
   };
   goals: {
-    home: number;
-    away: number;
+    home: number | null;
+    away: number | null;
   };
-  venue: { name: string };
+  venue?: { name?: string };
 }
 
 export interface FootballAPIStats {

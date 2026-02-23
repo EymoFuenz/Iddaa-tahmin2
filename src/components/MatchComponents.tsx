@@ -133,7 +133,7 @@ export function PredictionCard({ prediction }: PredictionCardProps) {
         <div className="flex items-center gap-3">
           <Badge variant="info">{prediction.predictedResult}</Badge>
           <p className={`text-2xl font-bold ${confidenceColor}`}>
-            {prediction.confidence}%
+            {Number.isFinite(prediction.confidence) ? prediction.confidence : 50}%
           </p>
         </div>
       </div>
@@ -146,7 +146,9 @@ export function PredictionCard({ prediction }: PredictionCardProps) {
         </div>
         <div className="text-center">
           <p className="text-xs text-gray-400 mb-1">2.5+ Üstü</p>
-          <p className="text-2xl font-bold text-white">{prediction.over25Probability}%</p>
+          <p className="text-2xl font-bold text-white">
+            {Number.isFinite(prediction.over25Probability) ? prediction.over25Probability : 50}%
+          </p>
         </div>
         <div className="text-center">
           <p className="text-xs text-gray-400 mb-1">Her İki Gol</p>

@@ -236,7 +236,7 @@ export function generateFormString(formData: TeamFormData, maxGames: number = 5)
  * Helper function to determine match result
  */
 function getMatchResult(match: Match, teamId: number): 'win' | 'draw' | 'loss' {
-  const isHome = match.homeTeam.id === teamId;
+  const isHome = Number(match.homeTeam?.id) === Number(teamId);
   const homeGoals = match.homeGoals;
   const awayGoals = match.awayGoals;
 

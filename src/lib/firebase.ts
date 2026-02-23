@@ -1,9 +1,10 @@
 /**
  * Firebase Service
- * Firestore operations for teams, matches, and predictions
+ * Firestore operations + Auth for teams, matches, and predictions
  */
 
 import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
   collection,
@@ -11,6 +12,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  setDoc,
   getDocs,
   getDoc,
   query,
@@ -19,7 +21,7 @@ import {
   limit,
   Timestamp,
 } from 'firebase/firestore';
-import { Team, Match, MatchPrediction, RecentMatch } from '@/types';
+import { Team, Match, MatchPrediction, RecentMatch, SeasonData, TeamSeasonData } from '@/types';
 
 // Firebase config from env
 const firebaseConfig = {
@@ -35,6 +37,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
 // Teams operations
 export async function addTeam(teamData: Omit<Team, 'id'>): Promise<string> {
@@ -250,4 +253,105 @@ export async function getStandings(season: number = 2024): Promise<any[]> {
   }
 }
 
-export { db, app };
+// Season data (yıl bazlı takımlar + maçlar)
+const SEASON_DATA_COLLECTION = 'seasonData';
+const SUPER_LIG_ID = 203;
+
+const TEAM_SEASON_COLLECTION = 'teamSeasonData';
+
+function matchesForTeam(matches: Match[], teamId: number): Match[] {
+  return matches.filter(
+    m => m.homeTeam.id === teamId || m.awayTeam.id === teamId
+  );
+}
+
+export async function saveSeasonData(
+  season: number,
+  data: { teams: Team[]; matches: Match[] }
+): Promise<void> {
+  const fetchedAt = new Date().toISOString();
+  const docRef = doc(db, SEASON_DATA_COLLECTION, String(season));
+  await setDoc(docRef, {
+    season,
+    leagueId: SUPER_LIG_ID,
+    teams: data.teams,
+    matches: data.matches,
+    fetchedAt,
+    updatedAt: Timestamp.now(),
+  });
+
+  // Takım bazlı veri: her takımın maçlarını kendi dökümanına yaz
+  for (const team of data.teams) {
+    const teamMatches = matchesForTeam(data.matches, team.id);
+    const teamSeasonRef = doc(db, TEAM_SEASON_COLLECTION, `${season}_${team.id}`);
+    await setDoc(teamSeasonRef, {
+      season,
+      teamId: team.id,
+      team,
+      matches: teamMatches,
+      fetchedAt,
+      updatedAt: Timestamp.now(),
+    });
+  }
+}
+
+export async function getSeasonData(season: number): Promise<SeasonData | null> {
+  try {
+    const docRef = doc(db, SEASON_DATA_COLLECTION, String(season));
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const d = docSnap.data();
+      return {
+        season: d.season,
+        leagueId: d.leagueId ?? SUPER_LIG_ID,
+        teams: d.teams ?? [],
+        matches: d.matches ?? [],
+        fetchedAt: d.fetchedAt ?? '',
+      } as SeasonData;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting season data:', error);
+    throw error;
+  }
+}
+
+export async function getSeasonsList(): Promise<number[]> {
+  try {
+    const snapshot = await getDocs(collection(db, SEASON_DATA_COLLECTION));
+    const seasons = snapshot.docs
+      .map(d => parseInt(d.id, 10))
+      .filter(n => !Number.isNaN(n))
+      .sort((a, b) => b - a); // en yeni önce
+    return seasons;
+  } catch (error) {
+    console.error('Error getting seasons list:', error);
+    return [];
+  }
+}
+
+export async function getTeamSeasonData(
+  season: number,
+  teamId: number
+): Promise<TeamSeasonData | null> {
+  try {
+    const docRef = doc(db, TEAM_SEASON_COLLECTION, `${season}_${teamId}`);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const d = docSnap.data();
+      return {
+        season: d.season,
+        teamId: d.teamId,
+        team: d.team,
+        matches: d.matches ?? [],
+        fetchedAt: d.fetchedAt ?? '',
+      } as TeamSeasonData;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting team season data:', error);
+    throw error;
+  }
+}
+
+export { db, app, auth };

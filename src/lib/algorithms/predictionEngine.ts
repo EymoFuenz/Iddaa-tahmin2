@@ -1,6 +1,6 @@
 /**
  * Match Prediction Engine
- * Calculates match predictions based on team form, statistics, market value, and head-to-head data
+ * Ev sahibi evde / deplasman deplasmanda skorlarına göre skor ve oran tahmini
  */
 
 import { Match, TeamFormData, FormRating, MatchPrediction, PredictionFactor, BettingOdds, BettingProbabilities } from '@/types';
@@ -18,6 +18,57 @@ interface PredictionInput {
   headToHeadMatches?: Match[];
 }
 
+/** Evde: atılan / yenilen gol ortalaması. Deplasmanda: atılan / yenilen gol ortalaması. (homeForm/awayForm zaten takıma göre filtrelenmiş) */
+function getVenueStats(form: TeamFormData, _teamId: number): { atHome: { avgScored: number; avgConceded: number; n: number }; away: { avgScored: number; avgConceded: number; n: number } } {
+  const homeMatches = form.homeForm || [];
+  const awayMatches = form.awayForm || [];
+  const atHome = { avgScored: 0, avgConceded: 0, n: homeMatches.length };
+  const away = { avgScored: 0, avgConceded: 0, n: awayMatches.length };
+  homeMatches.forEach(m => {
+    atHome.avgScored += m.homeGoals;
+    atHome.avgConceded += m.awayGoals;
+  });
+  awayMatches.forEach(m => {
+    away.avgScored += m.awayGoals;
+    away.avgConceded += m.homeGoals;
+  });
+  if (atHome.n > 0) {
+    atHome.avgScored /= atHome.n;
+    atHome.avgConceded /= atHome.n;
+  }
+  if (away.n > 0) {
+    away.avgScored /= away.n;
+    away.avgConceded /= away.n;
+  }
+  return { atHome, away };
+}
+
+/** İki takım arasındaki maçları döndürür (ev sahibi = homeId, deplasman = awayId veya tersi). */
+function getHeadToHeadMatches(allMatches: Match[], homeId: number, awayId: number): Match[] {
+  const h = Number(homeId);
+  const a = Number(awayId);
+  return allMatches.filter(m => {
+    const mHome = Number((m as any).homeTeam?.id ?? m.homeTeam?.id);
+    const mAway = Number((m as any).awayTeam?.id ?? m.awayTeam?.id);
+    return (mHome === h && mAway === a) || (mHome === a && mAway === h);
+  });
+}
+
+/** H2H maçlarından ev/deplasman beklenen gol (bu karşılaşma için). Ev sahibi attığı ort, deplasman attığı ort. */
+function headToHeadExpectedGoals(h2h: Match[], homeId: number, _awayId: number): { homeExpected: number; awayExpected: number; n: number } {
+  if (!h2h.length) return { homeExpected: 0, awayExpected: 0, n: 0 };
+  let homeSum = 0, awaySum = 0;
+  const h = Number(homeId);
+  h2h.forEach(m => {
+    const mHome = Number((m as any).homeTeam?.id ?? m.homeTeam?.id);
+    const isHomeAtHome = mHome === h;
+    homeSum += isHomeAtHome ? m.homeGoals : m.awayGoals;
+    awaySum += isHomeAtHome ? m.awayGoals : m.homeGoals;
+  });
+  const n = h2h.length;
+  return { homeExpected: homeSum / n, awayExpected: awaySum / n, n };
+}
+
 /**
  * Main prediction function - orchestrates all prediction calculations
  */
@@ -31,47 +82,87 @@ export function predictMatch(input: PredictionInput): MatchPrediction {
     input.awayTeamMarketValue || 0
   );
 
-  // Calculate individual probabilities
-  const resultProb = calculateResultProbability(homeFormRating, awayFormRating, marketValueAdjustment);
-  const over05Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 0.5);
-  const over15Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 1.5);
-  const over25Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 2.5);
-  const over35Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 3.5);
+  // Ev sahibi evde / deplasman deplasmanda istatistikleri
+  const homeVenue = getVenueStats(input.homeTeamForm, input.homeTeamId);
+  const awayVenue = getVenueStats(input.awayTeamForm, input.awayTeamId);
+
+  // Sezon içi karşılıklı maçlar (head-to-head) – 2024 vb. aynı sezonda skorlar
+  const h2hMatches = input.headToHeadMatches?.length
+    ? getHeadToHeadMatches(input.headToHeadMatches, input.homeTeamId, input.awayTeamId)
+    : [];
+  const h2hGoals = headToHeadExpectedGoals(h2hMatches, input.homeTeamId, input.awayTeamId);
+
+  // 1X2 olasılıkları: ev/deplasman verisi + form + H2H
+  const resultProb = calculateResultProbability(
+    homeFormRating,
+    awayFormRating,
+    marketValueAdjustment,
+    homeVenue,
+    awayVenue,
+    h2hGoals
+  );
+  const over05Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 0.5, homeVenue, awayVenue);
+  const over15Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 1.5, homeVenue, awayVenue);
+  const over25Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 2.5, homeVenue, awayVenue);
+  const over35Prob = calculateOverXProbability(input.homeTeamForm, input.awayTeamForm, 3.5, homeVenue, awayVenue);
   const bttsProbability = calculateBTTSProbability(homeFormRating, awayFormRating);
   const bttsAndOver25 = bttsProbability * over25Prob;
+
+  // Skor tahmini: ev/deplasman ortalamaları + isteğe H2H blend + Poisson
+  const predictedScore = predictScoreFromVenue(
+    homeVenue,
+    awayVenue,
+    input.homeTeamForm,
+    input.awayTeamForm,
+    input.homeTeamId,
+    input.awayTeamId,
+    homeFormRating,
+    awayFormRating,
+    over25Prob,
+    resultProb,
+    h2hGoals
+  );
   
-  // Determine likely scoreline
-  const predictedScore = predictScore(homeFormRating, awayFormRating, over25Prob);
+  // Sonuç skordan türet: 0-0 veya eşit skor = Beraberlik, ev > deplasman = Ev, aksi = Deplasman
+  const [homeGoalsStr, awayGoalsStr] = predictedScore.split('-');
+  const homeG = parseInt(homeGoalsStr, 10) || 0;
+  const awayG = parseInt(awayGoalsStr, 10) || 0;
+  const predictedResult: 'Home Win' | 'Draw' | 'Away Win' =
+    homeG > awayG ? 'Home Win' : homeG < awayG ? 'Away Win' : 'Draw';
+
+  // Güven: seçilen sonuca ait olasılık (tutarlı olsun)
+  const resultProbForOutcome =
+    predictedResult === 'Home Win' ? resultProb.homeWinProb
+    : predictedResult === 'Away Win' ? resultProb.awayWinProb
+    : resultProb.drawProb;
+  const confidence = Math.max(0, Math.min(100, Math.round((Number.isFinite(resultProbForOutcome) ? resultProbForOutcome : 1/3) * 100)));
   
   // Calculate odds
   const odds = calculateOdds(resultProb);
   const bettingOdds = calculateBettingOdds(resultProb, over05Prob, over15Prob, over25Prob, over35Prob, bttsProbability, bttsAndOver25);
   
-  // Betting probabilities
+  const p = (x: number) => Math.round((Number.isFinite(x) ? x : 0.5) * 100);
+  const over05 = p(over05Prob);
+  const over15 = p(over15Prob);
+  const over25 = p(over25Prob);
+  const over35 = p(over35Prob);
+  const bttsVal = p(bttsProbability);
+  const bttsOver25 = Math.max(0, Math.min(100, p(bttsAndOver25)));
+  const over1Under3 = Math.max(0, Math.min(100, p(over15Prob - over35Prob)));
+
   const bettingProbabilities: BettingProbabilities = {
-    homeWin: Math.round(resultProb.homeWinProb * 100),
-    draw: Math.round(resultProb.drawProb * 100),
-    awayWin: Math.round(resultProb.awayWinProb * 100),
-    over05: Math.round(over05Prob * 100),
-    over15: Math.round(over15Prob * 100),
-    over25: Math.round(over25Prob * 100),
-    over35: Math.round(over35Prob * 100),
-    btts: Math.round(bttsProbability * 100),
-    bttsAndOver25: Math.round(bttsAndOver25 * 100),
-    bothTeamsWin: 0, // Will be calculated
-    over1Under3: Math.round((over15Prob - over35Prob) * 100),
+    homeWin: Math.round((Number.isFinite(resultProb.homeWinProb) ? resultProb.homeWinProb : 1/3) * 100),
+    draw: Math.round((Number.isFinite(resultProb.drawProb) ? resultProb.drawProb : 1/3) * 100),
+    awayWin: Math.round((Number.isFinite(resultProb.awayWinProb) ? resultProb.awayWinProb : 1/3) * 100),
+    over05,
+    over15,
+    over25,
+    over35,
+    btts: bttsVal,
+    bttsAndOver25: bttsOver25,
+    bothTeamsWin: 0,
+    over1Under3,
   };
-
-  // Determine predicted result
-  const predictedResult = resultProb.homeWinProb > resultProb.awayWinProb
-    ? 'Home Win'
-    : resultProb.homeWinProb < resultProb.awayWinProb
-    ? 'Away Win'
-    : 'Draw';
-
-  // Calculate confidence
-  const maxProb = Math.max(resultProb.homeWinProb, resultProb.awayWinProb, resultProb.drawProb);
-  const confidence = Math.round(maxProb * 100);
 
   // Generate analysis factors
   const factors = generateAnalysisFactors(homeFormRating, awayFormRating);
@@ -94,9 +185,9 @@ export function predictMatch(input: PredictionInput): MatchPrediction {
     awayTeam: input.awayTeamName,
     predictedResult,
     confidence,
-    over25Probability: Math.round(over25Prob * 100),
+    over25Probability: over25,
     btts: bttsProbability > 0.5,
-    bttsProbability: Math.round(bttsProbability * 100),
+    bttsProbability: bttsVal,
     predictedScore,
     homeWinOdds: odds.home,
     drawOdds: odds.draw,
@@ -126,76 +217,77 @@ function calculateMarketValueAdjustment(homeValue: number, awayValue: number): n
 }
 
 /**
- * Calculate win/draw/loss probabilities with market value
+ * 1X2 olasılıkları: önce ev/deplasman verisiyle veriye dayalı dağıtım, yoksa form + piyasa.
  */
 function calculateResultProbability(
   homeFormRating: FormRating,
   awayFormRating: FormRating,
-  marketValueAdjustment: number = 0
+  marketValueAdjustment: number = 0,
+  homeVenue?: ReturnType<typeof getVenueStats>,
+  awayVenue?: ReturnType<typeof getVenueStats>,
+  h2h?: { homeExpected: number; awayExpected: number; n: number }
 ): { homeWinProb: number; drawProb: number; awayWinProb: number } {
-  // Factors:
-  // 1. Form index difference (0.4 weight)
-  // 2. Momentum (0.3 weight)
-  // 3. Home advantage (0.2 weight)
-  // 4. Market value (0.1 weight)
-
   const formDifference = homeFormRating.formIndex - awayFormRating.formIndex;
   const momentumDifference = homeFormRating.momentum - awayFormRating.momentum;
-  const homeAdvantageFactor = homeFormRating.homeAdvantage / 20; // Normalize to 0-1
+  const homeAdvantageFactor = homeFormRating.homeAdvantage / 20;
 
-  // Calculate base probabilities
-  let homeWinProb = 0.5 + (formDifference / 200) + (momentumDifference / 200) + (homeAdvantageFactor * 0.15) + marketValueAdjustment;
-  let awayWinProb = 0.5 - (formDifference / 200) - (momentumDifference / 200) - (homeAdvantageFactor * 0.15) - marketValueAdjustment;
+  let homeWinProb = 0.33 + (formDifference / 150) + (momentumDifference / 150) + (homeAdvantageFactor * 0.12) + marketValueAdjustment;
+  let awayWinProb = 0.33 - (formDifference / 150) - (momentumDifference / 150) - (homeAdvantageFactor * 0.12) - marketValueAdjustment;
 
-  // Allow for draws
-  const drawProb = calculateDrawProbability(homeFormRating, awayFormRating);
+  // Veri varsa: ev sahibi evde gol averajı vs deplasman deplasmanda gol averajı → 1X2 dağılımı
+  if (homeVenue && awayVenue && homeVenue.atHome.n >= 1 && awayVenue.away.n >= 1) {
+    const homeStrengthAtHome = homeVenue.atHome.avgScored - homeVenue.atHome.avgConceded;
+    const awayStrengthAway = awayVenue.away.avgScored - awayVenue.away.avgConceded;
+    const venueDiff = homeStrengthAtHome - awayStrengthAway;
+    // venueDiff > 0 → ev daha güçlü; olasılıkları bu farka göre dağıt (sabit %23 değil)
+    const strengthWeight = Math.max(-0.35, Math.min(0.35, venueDiff * 0.12));
+    homeWinProb = 0.33 + strengthWeight;
+    awayWinProb = 0.33 - strengthWeight;
+  }
 
-  // Normalize
+  // H2H varsa hafif kaydır: karşılıklı maçlarda kim daha çok attı?
+  if (h2h && h2h.n >= 1) {
+    const h2hDiff = (h2h.homeExpected - h2h.awayExpected) * 0.06;
+    homeWinProb += h2hDiff;
+    awayWinProb -= h2hDiff;
+  }
+
+  const drawProb = Math.max(0.2, Math.min(0.4, 0.34 - Math.abs(homeWinProb - awayWinProb) * 0.3));
   const total = homeWinProb + awayWinProb + drawProb;
-
   return {
-    homeWinProb: Math.max(0, Math.min(1, homeWinProb / total)),
-    drawProb: Math.max(0, Math.min(1, drawProb / total)),
-    awayWinProb: Math.max(0, Math.min(1, awayWinProb / total)),
+    homeWinProb: Math.max(0.08, Math.min(0.75, homeWinProb / total)),
+    drawProb: Math.max(0.12, Math.min(0.45, drawProb / total)),
+    awayWinProb: Math.max(0.08, Math.min(0.75, awayWinProb / total)),
   };
 }
 
 /**
- * Calculate draw probability
+ * Over X gol olasılığı. Ev/deplasman verisi varsa ev sahibi evde + deplasman deplasmanda gol ortalaması kullanılır.
  */
-function calculateDrawProbability(homeForm: FormRating, awayForm: FormRating): number {
-  // Teams that are very similar in form are more likely to draw
-  const formDifference = Math.abs(homeForm.formIndex - awayForm.formIndex);
-  const defensiveDifference = Math.abs(homeForm.defenseRating - awayForm.defenseRating);
+function calculateOverXProbability(
+  homeTeamForm: TeamFormData,
+  awayTeamForm: TeamFormData,
+  threshold: number,
+  homeVenue?: ReturnType<typeof getVenueStats>,
+  awayVenue?: ReturnType<typeof getVenueStats>
+): number {
+  let expectedTotal: number;
+  const homeLen = homeTeamForm.lastMatches?.length ?? 0;
+  const awayLen = awayTeamForm.lastMatches?.length ?? 0;
 
-  // If form is similar and both teams are defensive, higher draw chance
-  let drawProb = 0.25; // Base draw probability
-  
-  if (formDifference < 10) drawProb += 0.05;
-  if (defensiveDifference > 10) drawProb -= 0.05;
+  if (homeVenue && awayVenue && homeVenue.atHome.n >= 1 && awayVenue.away.n >= 1) {
+    expectedTotal = homeVenue.atHome.avgScored + awayVenue.away.avgScored;
+  } else if (homeLen > 0 && awayLen > 0) {
+    expectedTotal = (homeTeamForm.goalsScored / homeLen) + (awayTeamForm.goalsScored / awayLen);
+  } else {
+    return 0.5;
+  }
 
-  return Math.max(0.1, Math.min(0.4, drawProb));
-}
-
-/**
- * Calculate Over X goals probability (use Poisson distribution)
- */
-function calculateOverXProbability(homeTeamForm: TeamFormData, awayTeamForm: TeamFormData, threshold: number): number {
-  if (!homeTeamForm.lastMatches || !awayTeamForm.lastMatches) return 0.5;
-
-  const homeAvgGoals = homeTeamForm.goalsScored / homeTeamForm.lastMatches.length;
-  const awayAvgGoals = awayTeamForm.goalsScored / awayTeamForm.lastMatches.length;
-
-  // Expected total goals
-  const expectedTotalGoals = homeAvgGoals + awayAvgGoals;
-  const lambda = expectedTotalGoals;
-
-  // Poisson: P(G > threshold) = 1 - P(G <= threshold)
+  const lambda = Math.max(0.1, Math.min(5, expectedTotal));
   let cumulativeProbability = 0;
   for (let i = 0; i <= Math.floor(threshold); i++) {
     cumulativeProbability += (Math.pow(lambda, i) / factorial(i)) * Math.exp(-lambda);
   }
-
   return Math.max(0, Math.min(1, 1 - cumulativeProbability));
 }
 
@@ -224,37 +316,100 @@ function calculateBTTSProbability(
   return Math.max(0.2, Math.min(0.8, bttsProb));
 }
 
+/** Süper Lig sezon ortalaması: takım başına gol (maç başına ~2.7–2.9 toplam) */
+const LEAGUE_AVG_GOALS = 1.38;
+/** Ev sahibi avantajı: beklenen gole çarpan */
+const HOME_ADVANTAGE_MULTIPLIER = 1.08;
+
+/** Poisson P(X = k) = λ^k * e^(-λ) / k! */
+function poissonPmf(k: number, lambda: number): number {
+  if (lambda <= 0) return k === 0 ? 1 : 0;
+  return (Math.pow(lambda, k) / factorial(k)) * Math.exp(-lambda);
+}
+
 /**
- * Predict the most likely scoreline
+ * Beklenen gol (λ_home, λ_away) ile tüm makul skorların olasılığını hesaplayıp
+ * en olası skoru döndürür. Böylece 1-0 sapması olmaz, veriye göre 0-0, 1-1, 2-1 vb. çıkar.
  */
-function predictScore(homeForm: FormRating, awayForm: FormRating, over25Prob: number): string {
-  const homeAttack = homeForm.attackStrength / 100;
-  const awayAttack = awayForm.attackStrength / 100;
-  const homeDefense = (100 - homeForm.defenseRating) / 100;
-  const awayDefense = (100 - awayForm.defenseRating) / 100;
-
-  // Use Poisson distribution to estimate most likely goals
-  const homeExpectedGoals = homeAttack * 2.5 - awayDefense * 0.8;
-  const awayExpectedGoals = awayAttack * 2.5 - homeDefense * 0.8;
-
-  // Round to nearest integer or most likely value
-  let homeGoals = Math.round(Math.max(0, homeExpectedGoals));
-  let awayGoals = Math.round(Math.max(0, awayExpectedGoals));
-
-  // Adjust for over/under
-  if (over25Prob < 0.4 && homeGoals + awayGoals > 2) {
-    // Under likely, reduce one goal
-    if (homeGoals > 0 && awayGoals > 0) {
-      homeGoals = Math.max(0, homeGoals - 1);
-    } else if (homeGoals > 0) {
-      homeGoals = Math.max(0, homeGoals - 1);
+function mostLikelyScoreFromPoisson(lambdaHome: number, lambdaAway: number): { home: number; away: number } {
+  lambdaHome = Math.max(0.05, Math.min(4.5, lambdaHome));
+  lambdaAway = Math.max(0.05, Math.min(4.5, lambdaAway));
+  let bestProb = 0;
+  let bestHome = 0;
+  let bestAway = 0;
+  for (let h = 0; h <= 6; h++) {
+    for (let a = 0; a <= 6; a++) {
+      const p = poissonPmf(h, lambdaHome) * poissonPmf(a, lambdaAway);
+      if (p > bestProb) {
+        bestProb = p;
+        bestHome = h;
+        bestAway = a;
+      }
     }
-  } else if (over25Prob > 0.65 && homeGoals + awayGoals < 3) {
-    // Over likely, add one goal
-    homeGoals += 1;
+  }
+  return { home: bestHome, away: bestAway };
+}
+
+/** Beklenen golü makul bandda tut; 0-0’ı aşırı öne çıkarmamak için minimum. */
+const MIN_EXPECTED_GOALS = 0.55;
+
+/**
+ * Skor: ev sahibi evde attığı × (deplasmanın deplasmanda yediği / lig ort.); deplasman için tersi.
+ * Sezon içi karşılıklı maç (H2H) varsa buna göre hafif blend. Poisson ile en olası skor.
+ */
+function predictScoreFromVenue(
+  homeVenue: ReturnType<typeof getVenueStats>,
+  awayVenue: ReturnType<typeof getVenueStats>,
+  homeTeamForm: TeamFormData,
+  awayTeamForm: TeamFormData,
+  _homeTeamId: number,
+  _awayTeamId: number,
+  homeForm: FormRating,
+  awayForm: FormRating,
+  _over25Prob: number,
+  _resultProb: { homeWinProb: number; drawProb: number; awayWinProb: number },
+  h2h?: { homeExpected: number; awayExpected: number; n: number }
+): string {
+  const homeAtHome = homeVenue.atHome;
+  const awayAway = awayVenue.away;
+  const homeN = homeTeamForm.lastMatches?.length ?? 0;
+  const awayN = awayTeamForm.lastMatches?.length ?? 0;
+
+  let homeExpected: number;
+  let awayExpected: number;
+
+  if (homeAtHome.n >= 1 && awayAway.n >= 1) {
+    homeExpected = homeAtHome.avgScored * (awayAway.avgConceded / LEAGUE_AVG_GOALS);
+    awayExpected = awayAway.avgScored * (homeAtHome.avgConceded / LEAGUE_AVG_GOALS);
+    homeExpected *= HOME_ADVANTAGE_MULTIPLIER;
+  } else if (homeN > 0 && awayN > 0) {
+    // Veri var ama ev/deplasman ayrımı yok: genel maç başı gol ortalaması kullan
+    homeExpected = (homeTeamForm.goalsScored / homeN) * (awayTeamForm.goalsConceded / awayN) / LEAGUE_AVG_GOALS;
+    awayExpected = (awayTeamForm.goalsScored / awayN) * (homeTeamForm.goalsConceded / homeN) / LEAGUE_AVG_GOALS;
+    homeExpected *= HOME_ADVANTAGE_MULTIPLIER;
+  } else {
+    const homeAttack = homeForm.attackStrength / 100;
+    const awayAttack = awayForm.attackStrength / 100;
+    const homeDefense = (100 - homeForm.defenseRating) / 100;
+    const awayDefense = (100 - awayForm.defenseRating) / 100;
+    homeExpected = Math.max(MIN_EXPECTED_GOALS, homeAttack * 2.4 - awayDefense * 0.8);
+    awayExpected = Math.max(MIN_EXPECTED_GOALS, awayAttack * 2.4 - homeDefense * 0.8);
+    const formDiff = (homeForm.formIndex - awayForm.formIndex) / 80;
+    homeExpected = Math.max(MIN_EXPECTED_GOALS, homeExpected + formDiff);
+    awayExpected = Math.max(MIN_EXPECTED_GOALS, awayExpected - formDiff);
+    homeExpected *= HOME_ADVANTAGE_MULTIPLIER;
   }
 
-  return `${homeGoals}-${awayGoals}`;
+  // Sezon içi karşılıklı maç varsa beklenen gole blend (70% venue/genel, 30% H2H)
+  if (h2h && h2h.n >= 1) {
+    homeExpected = homeExpected * 0.7 + Math.max(MIN_EXPECTED_GOALS, h2h.homeExpected) * 0.3;
+    awayExpected = awayExpected * 0.7 + Math.max(MIN_EXPECTED_GOALS, h2h.awayExpected) * 0.3;
+  }
+
+  homeExpected = Math.max(MIN_EXPECTED_GOALS, Math.min(4.2, homeExpected));
+  awayExpected = Math.max(MIN_EXPECTED_GOALS, Math.min(4.2, awayExpected));
+  const { home, away } = mostLikelyScoreFromPoisson(homeExpected, awayExpected);
+  return `${home}-${away}`;
 }
 
 /**
