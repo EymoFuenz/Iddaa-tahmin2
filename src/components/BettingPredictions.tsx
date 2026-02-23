@@ -16,7 +16,7 @@ interface BettingPredictionsProps {
 export function BettingPredictions({ probabilities, homeTeam, awayTeam }: BettingPredictionsProps) {
   const bets = [
     {
-      title: '1X2 (Sonuç)',
+      title: '1X2 (Sonuç )',
       items: [
         { label: `${homeTeam} Kazanır`, value: probabilities.homeWin, color: 'text-blue-400' },
         { label: 'Beraberlik', value: probabilities.draw, color: 'text-gray-400' },
