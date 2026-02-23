@@ -44,11 +44,20 @@ export function formatRelativeDate(dateString: string): string {
 export function getStatusColor(status: 'scheduled' | 'live' | 'finished'): string {
   switch (status) {
     case 'live':
-      return 'bg-red-500 bg-opacity-20 text-red-400';
+      return 'bg-destructive/15 text-destructive';
     case 'finished':
-      return 'bg-gray-500 bg-opacity-20 text-gray-300';
+      return 'bg-muted text-muted-foreground';
     case 'scheduled':
-      return 'bg-blue-500 bg-opacity-20 text-blue-400';
+      return 'bg-primary/15 text-primary';
+  }
+}
+
+/** For Badge component variant prop */
+export function getStatusVariant(status: 'scheduled' | 'live' | 'finished'): 'info' | 'danger' | 'warning' {
+  switch (status) {
+    case 'live': return 'danger';
+    case 'finished': return 'info';
+    case 'scheduled': return 'info';
   }
 }
 

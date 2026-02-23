@@ -1,23 +1,20 @@
-/**
- * Team Detail Page
- * Takım detayı: maç listesi ve istatistikler (Firebase teamSeasonData)
- */
-
 import { useParams, Link } from 'react-router-dom';
 import { useTeamSeasonData } from '@/hooks';
 import { Header, LoadingSpinner, ErrorMessage } from '@/components/Layout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ArrowLeft,
   Calendar,
   Trophy,
   Target,
   Shield,
-  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { Match } from '@/types';
 
 function getTeamResult(m: Match, teamId: number): 'W' | 'D' | 'L' {
-  const isHome = m.homeTeam.id === teamId;
+  const isHome = Number(m.homeTeam?.id) === teamId;
   const our = isHome ? m.homeGoals : m.awayGoals;
   const other = isHome ? m.awayGoals : m.homeGoals;
   if (our > other) return 'W';
@@ -26,11 +23,11 @@ function getTeamResult(m: Match, teamId: number): 'W' | 'D' | 'L' {
 }
 
 function getOpponent(m: Match, teamId: number) {
-  return m.homeTeam.id === teamId ? m.awayTeam : m.homeTeam;
+  return Number(m.homeTeam?.id) === teamId ? m.awayTeam : m.homeTeam;
 }
 
 function getScore(m: Match, teamId: number): string {
-  const isHome = m.homeTeam.id === teamId;
+  const isHome = Number(m.homeTeam?.id) === teamId;
   return isHome ? `${m.homeGoals} - ${m.awayGoals}` : `${m.awayGoals} - ${m.homeGoals}`;
 }
 
@@ -42,9 +39,9 @@ export function TeamDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <div className="min-h-screen bg-background">
         <Header />
-        <main className="container py-8 px-4 max-w-4xl mx-auto">
+        <main className="site-container py-8">
           <LoadingSpinner />
         </main>
       </div>
@@ -53,15 +50,14 @@ export function TeamDetailPage() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <div className="min-h-screen bg-background">
         <Header />
-        <main className="container py-8 px-4 max-w-4xl mx-auto">
-          <Link
-            to="/teams"
-            className="inline-flex items-center gap-2 text-sky-400 hover:text-sky-300 mb-6"
-          >
-            <ArrowLeft className="w-4 h-4" /> Takımlara dön
-          </Link>
+        <main className="site-container py-8">
+          <Button variant="ghost" asChild className="mb-6 gap-2">
+            <Link to="/teams">
+              <ArrowLeft className="h-4 w-4" /> Takımlara dön
+            </Link>
+          </Button>
           <ErrorMessage message={error || 'Takım bulunamadı.'} />
         </main>
       </div>
@@ -73,11 +69,11 @@ export function TeamDetailPage() {
   const draws = matches.filter(m => getTeamResult(m, team.id) === 'D').length;
   const losses = matches.filter(m => getTeamResult(m, team.id) === 'L').length;
   const goalsFor = matches.reduce(
-    (sum, m) => sum + (m.homeTeam.id === team.id ? m.homeGoals : m.awayGoals),
+    (sum, m) => sum + (Number(m.homeTeam?.id) === team.id ? m.homeGoals : m.awayGoals),
     0
   );
   const goalsAgainst = matches.reduce(
-    (sum, m) => sum + (m.homeTeam.id === team.id ? m.awayGoals : m.homeGoals),
+    (sum, m) => sum + (Number(m.homeTeam?.id) === team.id ? m.awayGoals : m.homeGoals),
     0
   );
   const points = wins * 3 + draws;
@@ -86,123 +82,120 @@ export function TeamDetailPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="container py-8 px-4 max-w-4xl mx-auto">
-        <Link
-          to="/teams"
-          className="inline-flex items-center gap-2 text-sky-400 hover:text-sky-300 mb-6 transition"
-        >
-          <ArrowLeft className="w-4 h-4" /> Takımlara dön
-        </Link>
+      <main className="site-container py-8">
+        <Button variant="ghost" asChild className="mb-6 gap-2">
+          <Link to="/teams">
+            <ArrowLeft className="h-4 w-4" /> Takımlara dön
+          </Link>
+        </Button>
 
-        {/* Takım başlık */}
-        <div className="rounded-2xl bg-slate-800/80 border border-slate-600/50 p-6 mb-8 flex flex-col sm:flex-row items-center gap-6">
-          <img
-            src={team.logo}
-            alt={team.name}
-            className="w-24 h-24 rounded-xl bg-white/5 object-contain"
-          />
-          <div className="text-center sm:text-left">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">{team.name}</h1>
-            <p className="text-slate-400 mt-1">
-              Süper Lig {season}–{String(Number(season) + 1).slice(-2)} sezonu
-            </p>
-          </div>
+        <Card className="mb-8">
+          <CardContent className="flex flex-col items-center gap-6 p-6 sm:flex-row sm:text-left">
+            <img
+              src={team.logo}
+              alt={team.name}
+              className="h-24 w-24 rounded-xl bg-muted object-contain"
+            />
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{team.name}</h1>
+              <p className="mt-1 text-muted-foreground">
+                Süper Lig {season}–{String(Number(season) + 1).slice(-2)} sezonu
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { icon: Trophy, value: points, label: 'Puan', color: 'text-amber-500' },
+            { icon: Target, value: wins, label: 'Galibiyet', color: 'text-emerald-500' },
+            { icon: Shield, value: draws, label: 'Beraberlik', color: 'text-amber-400' },
+            { icon: TrendingDown, value: losses, label: 'Mağlubiyet', color: 'text-destructive' },
+          ].map(({ icon: Icon, value, label, color }) => (
+            <Card key={label}>
+              <CardContent className="p-4 text-center">
+                <Icon className={`mx-auto mb-2 h-6 w-6 ${color}`} />
+                <p className="text-2xl font-bold text-foreground">{value}</p>
+                <p className="text-xs text-muted-foreground">{label}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* İstatistikler */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          <div className="rounded-xl bg-slate-800/60 border border-slate-600/40 p-4 text-center">
-            <Trophy className="w-6 h-6 text-amber-400 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{points}</p>
-            <p className="text-xs text-slate-400">Puan</p>
-          </div>
-          <div className="rounded-xl bg-slate-800/60 border border-slate-600/40 p-4 text-center">
-            <Target className="w-6 h-6 text-green-400 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{wins}</p>
-            <p className="text-xs text-slate-400">Galibiyet</p>
-          </div>
-          <div className="rounded-xl bg-slate-800/60 border border-slate-600/40 p-4 text-center">
-            <Shield className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{draws}</p>
-            <p className="text-xs text-slate-400">Beraberlik</p>
-          </div>
-          <div className="rounded-xl bg-slate-800/60 border border-slate-600/40 p-4 text-center">
-            <TrendingUp className="w-6 h-6 text-red-400 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{losses}</p>
-            <p className="text-xs text-slate-400">Mağlubiyet</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-4 mb-8 justify-center sm:justify-start">
-          <span className="px-4 py-2 rounded-lg bg-sky-500/20 text-sky-300 text-sm font-medium">
+        <div className="mb-8 flex flex-wrap justify-center gap-4 sm:justify-start">
+          <span className="rounded-lg bg-primary/15 px-4 py-2 text-sm font-medium text-primary">
             Atılan: {goalsFor}
           </span>
-          <span className="px-4 py-2 rounded-lg bg-red-500/20 text-red-300 text-sm font-medium">
+          <span className="rounded-lg bg-destructive/15 px-4 py-2 text-sm font-medium text-destructive">
             Yenilen: {goalsAgainst}
           </span>
-          <span className="px-4 py-2 rounded-lg bg-slate-600/50 text-slate-300 text-sm font-medium">
+          <span className="rounded-lg bg-muted px-4 py-2 text-sm font-medium text-muted-foreground">
             Averaj: {goalsFor - goalsAgainst >= 0 ? '+' : ''}{goalsFor - goalsAgainst}
           </span>
         </div>
 
-        {/* Maç listesi */}
-        <div className="rounded-2xl bg-slate-800/80 border border-slate-600/50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-600/50 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-sky-400" />
-            <h2 className="text-lg font-bold text-white">Maçlar ({sortedMatches.length})</h2>
-          </div>
-          <ul className="divide-y divide-slate-600/50">
-            {sortedMatches.length === 0 ? (
-              <li className="px-4 py-8 text-center text-slate-400">Bu sezona ait maç kaydı yok.</li>
-            ) : (
-              sortedMatches.map(m => {
-                const result = getTeamResult(m, team.id);
-                const opponent = getOpponent(m, team.id);
-                const score = getScore(m, team.id);
-                const isHome = m.homeTeam.id === team.id;
-                return (
-                  <li
-                    key={m.id}
-                    className="px-4 py-3 flex flex-wrap items-center gap-3 hover:bg-slate-700/30 transition"
-                  >
-                    <span
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
-                        result === 'W'
-                          ? 'bg-green-500/20 text-green-400'
-                          : result === 'D'
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-red-500/20 text-red-400'
-                      }`}
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2 border-b border-border">
+            <Calendar className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Maçlar ({sortedMatches.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ul className="divide-y divide-border">
+              {sortedMatches.length === 0 ? (
+                <li className="py-8 text-center text-muted-foreground">
+                  Bu sezona ait maç kaydı yok.
+                </li>
+              ) : (
+                sortedMatches.map(m => {
+                  const result = getTeamResult(m, team.id);
+                  const opponent = getOpponent(m, team.id);
+                  const score = getScore(m, team.id);
+                  const isHome = Number(m.homeTeam?.id) === team.id;
+                  return (
+                    <li
+                      key={m.id}
+                      className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-muted/50"
                     >
-                      {result === 'W' ? 'G' : result === 'D' ? 'B' : 'M'}
-                    </span>
-                    <span className="text-slate-500 text-sm w-20 shrink-0">
-                      {new Date(m.date).toLocaleDateString('tr-TR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: '2-digit',
-                      })}
-                    </span>
-                    <span className="text-slate-400 text-sm shrink-0">
-                      {isHome ? 'Ev' : 'Dış'}
-                    </span>
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <img
-                        src={opponent.logo}
-                        alt=""
-                        className="w-6 h-6 object-contain shrink-0"
-                      />
-                      <span className="text-white font-medium truncate">{opponent.name}</span>
-                    </div>
-                    <span className="text-sky-300 font-mono font-semibold shrink-0">{score}</span>
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </div>
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
+                          result === 'W'
+                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                            : result === 'D'
+                              ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                              : 'bg-destructive/20 text-destructive'
+                        }`}
+                      >
+                        {result === 'W' ? 'G' : result === 'D' ? 'B' : 'M'}
+                      </span>
+                      <span className="w-20 shrink-0 text-sm text-muted-foreground">
+                        {new Date(m.date).toLocaleDateString('tr-TR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: '2-digit',
+                        })}
+                      </span>
+                      <span className="shrink-0 text-sm text-muted-foreground">
+                        {isHome ? 'Ev' : 'Dış'}
+                      </span>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <img
+                          src={opponent.logo}
+                          alt=""
+                          className="h-6 w-6 shrink-0 object-contain"
+                        />
+                        <span className="truncate font-medium text-foreground">{opponent.name}</span>
+                      </div>
+                      <span className="shrink-0 font-mono font-semibold text-primary">{score}</span>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

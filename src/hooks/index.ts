@@ -12,7 +12,11 @@ import {
   getSeasonData,
   saveSeasonData,
   getTeamSeasonData,
+  getUserProfile,
+  setUserProfile,
+  type UserProfile,
 } from '@/lib/firebase';
+import { useAuth } from '@/context/AuthContext';
 import { teamSeasonDataToFormData } from '@/lib/utils/seasonForm';
 
 /**
@@ -495,6 +499,56 @@ export function useAnalyzeMatch(homeTeamId?: number, awayTeamId?: number) {
   };
 
   return { analyze, prediction, analyzing, error };
+}
+
+/** Kullanıcı profil verisi (Firestore users/{uid}: displayName, photoBase64) */
+export function useUserProfile() {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refetch = async () => {
+    if (!user?.uid) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const p = await getUserProfile(user.uid);
+      setProfile(p);
+    } catch {
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    getUserProfile(user.uid).then(p => {
+      if (!cancelled) setProfile(p);
+    }).catch(() => {
+      if (!cancelled) setProfile(null);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [user?.uid]);
+
+  const updateProfile = async (data: { displayName?: string; photoBase64?: string | null }) => {
+    if (!user?.uid) return;
+    await setUserProfile(user.uid, data);
+    await refetch();
+  };
+
+  return { profile, loading, updateProfile, refetch };
 }
 
 /** @deprecated Otomatik tahmin için; yeni akışta useAnalyzeMatch kullanın */

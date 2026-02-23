@@ -1,9 +1,59 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 199 89% 48%;
+    --radius: 0.75rem;
+    --chart-1: 199 89% 48%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 43 96% 56%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 199 89% 48%;
+  }
+}
 
 * {
-  @apply box-border;
+  @apply border-border box-border;
 }
 
 html {
@@ -11,129 +61,24 @@ html {
 }
 
 body {
-  @apply bg-gradient-dark text-white antialiased;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  @apply bg-background text-foreground antialiased;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-code {
-  @apply font-mono text-sm;
+/* Shadcn-style radius utilities */
+.rounded-lg {
+  border-radius: var(--radius);
+}
+.rounded-xl {
+  border-radius: calc(var(--radius) + 0.25rem);
+}
+.rounded-2xl {
+  border-radius: calc(var(--radius) + 0.5rem);
 }
 
-/* Utility Classes */
-.card {
-  @apply bg-gray-800 rounded-lg border border-gray-700 p-6 shadow-lg hover:shadow-xl transition-shadow;
-}
-
-.card-sm {
-  @apply bg-gray-800 rounded-lg border border-gray-700 p-4 shadow-md;
-}
-
-.btn {
-  @apply px-6 py-2 rounded-lg font-medium transition-all duration-200 inline-flex items-center gap-2;
-}
-
-.btn-primary {
-  @apply btn bg-sky-500 hover:bg-sky-600 active:scale-95 text-white;
-}
-
-.btn-secondary {
-  @apply btn bg-gray-700 hover:bg-gray-600 text-white;
-}
-
-.btn-outline {
-  @apply btn border border-sky-500 text-sky-400 hover:bg-sky-500 hover:text-white;
-}
-
-.btn-sm {
-  @apply px-3 py-1 text-sm rounded font-medium;
-}
-
-.badge {
-  @apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium;
-}
-
-.badge-success {
-  @apply badge bg-green-500 bg-opacity-20 text-green-400;
-}
-
-.badge-danger {
-  @apply badge bg-red-500 bg-opacity-20 text-red-400;
-}
-
-.badge-warning {
-  @apply badge bg-yellow-500 bg-opacity-20 text-yellow-400;
-}
-
-.badge-info {
-  @apply badge bg-sky-500 bg-opacity-20 text-sky-400;
-}
-
-.form-input {
-  @apply w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent;
-}
-
-.form-select {
-  @apply form-input cursor-pointer;
-}
-
-.container {
-  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
-}
-
-.grid-auto {
-  @apply grid gap-6;
-}
-
-.grid-2 {
-  @apply grid grid-cols-1 md:grid-cols-2 gap-6;
-}
-
-.grid-3 {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
-}
-
-.grid-4 {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6;
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-in;
-}
-
-.animate-slideIn {
-  animation: slideIn 0.3s ease-out;
-}
-
-/* Responsiveness */
-@media (max-width: 640px) {
-  .container {
-    @apply px-3;
-  }
-
-  .card {
-    @apply p-4;
+/* Tüm sayfalar ve navbar için aynı yatay boşluk ve max genişlik */
+@layer components {
+  .site-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
   }
 }

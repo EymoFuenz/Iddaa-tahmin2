@@ -5,10 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Süper Lig Maç Analiz ve Tahmin Platformu - Gelişmiş form analizi ve istatistiksel tahminlerle maçları önceden analiz edin." />
-    <meta name="theme-color" content="#1f2937" />
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <title>⚽ Süper Lig Analytics - Maç Tahmin Platformu</title>
+    <script>
+      (function() {
+        var t = localStorage.getItem('super-lig-theme');
+        var dark = t === 'system' ? window.matchMedia('(prefers-color-scheme: dark)').matches : t !== 'light';
+        document.documentElement.classList.toggle('dark', dark);
+      })();
+    </script>
   </head>
-  <body class="dark">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

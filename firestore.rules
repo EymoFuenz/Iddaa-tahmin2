@@ -1,21 +1,33 @@
 /**
  * Firebase Firestore Rules
  * Security rules for database access control
- * Version: 2.2 - Production ready with proper authentication
+ * Version: 2.3 - User profile (displayName, photoBase64), isAdmin güvenli
  */
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Function to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Function to check if user is admin
+    // Admin kontrolü: users doc var ve role == 'admin' (yoksa get().data hata verebilir)
     function isAdmin() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isAuthenticated() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Profil: displayName, photoBase64 (string veya null), updatedAt. role sadece admin yazabilsin.
+    function isValidUserProfile(data) {
+      return (!('displayName' in data) || data.displayName is string) &&
+             (!('photoBase64' in data) || data.photoBase64 is string || data.photoBase64 == null) &&
+             (!('updatedAt' in data) || data.updatedAt is string) &&
+             (!('role' in data) || isAdmin());
     }
 
     // Function to validate team data (flexible for API imports)
@@ -33,11 +45,11 @@ service cloud.firestore {
              (!('updatedAt' in data) || (data.updatedAt is string || data.updatedAt is timestamp));
     }
 
-    // Users collection - Secure access
+    // Users: profil (displayName, photoBase64) + isteğe bağlı role (admin)
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow write: if request.auth.uid == userId || isAdmin();
-      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow update: if (isOwner(userId) && isValidUserProfile(request.resource.data)) || isAdmin();
       allow delete: if isAdmin();
     }
 

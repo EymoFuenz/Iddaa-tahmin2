@@ -23,9 +23,9 @@ export function BettingPredictions({ probabilities, homeTeam, awayTeam }: Bettin
     {
       title: '1X2 (Sonuç )',
       items: [
-        { label: `${homeTeam} Kazanır`, value: safePercent(probabilities.homeWin), color: 'text-blue-400' },
-        { label: 'Beraberlik', value: safePercent(probabilities.draw), color: 'text-gray-400' },
-        { label: `${awayTeam} Kazanır`, value: safePercent(probabilities.awayWin), color: 'text-red-400' },
+        { label: `${homeTeam} Kazanır`, value: safePercent(probabilities.homeWin), color: 'text-primary' },
+        { label: 'Beraberlik', value: safePercent(probabilities.draw), color: 'text-muted-foreground' },
+        { label: `${awayTeam} Kazanır`, value: safePercent(probabilities.awayWin), color: 'text-destructive' },
       ],
     },
     {
@@ -49,34 +49,34 @@ export function BettingPredictions({ probabilities, homeTeam, awayTeam }: Bettin
 
   return (
     <Card>
-      <div className="flex items-center gap-2 mb-6">
-        <TrendingUp className="w-5 h-5 text-sky-400" />
-        <h3 className="text-lg font-bold text-white">İddia Tahminleri</h3>
+      <div className="mb-6 flex items-center gap-2">
+        <TrendingUp className="h-5 w-5 text-primary" />
+        <h3 className="text-lg font-bold text-foreground">İddia Tahminleri</h3>
       </div>
 
       <div className="space-y-6">
         {bets.map((betGroup, idx) => (
           <div key={idx}>
-            <h4 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wide">
+            <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               {betGroup.title}
             </h4>
             <div className="space-y-2">
               {betGroup.items.map((item, itemIdx) => (
                 <div key={itemIdx} className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-300">{item.label}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">{item.label}</span>
                     <span className={`text-sm font-bold ${item.color}`}>{item.value}%</span>
                   </div>
-                  <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                     <div
                       className={`h-2 rounded-full transition-all duration-300 ${
                         item.value >= 70
-                          ? 'bg-green-500'
+                          ? 'bg-emerald-500'
                           : item.value >= 50
-                          ? 'bg-blue-500'
-                          : item.value >= 30
-                          ? 'bg-yellow-500'
-                          : 'bg-red-500'
+                            ? 'bg-primary'
+                            : item.value >= 30
+                              ? 'bg-amber-500'
+                              : 'bg-destructive'
                       }`}
                       style={{ width: `${Math.max(0, Math.min(100, item.value))}%` }}
                     />
@@ -88,25 +88,24 @@ export function BettingPredictions({ probabilities, homeTeam, awayTeam }: Bettin
         ))}
       </div>
 
-      {/* Legend */}
-      <div className="mt-6 pt-4 border-t border-gray-700">
-        <p className="text-xs text-gray-400 mb-2 font-semibold">Yüzdelik Rehberi:</p>
+      <div className="mt-6 border-t border-border pt-4">
+        <p className="mb-2 text-xs font-semibold text-muted-foreground">Yüzdelik Rehberi:</p>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-500" />
-            <span className="text-gray-400">%70+ (Yüksek)</span>
+            <div className="h-3 w-3 rounded-full bg-emerald-500" />
+            <span className="text-muted-foreground">%70+ (Yüksek)</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-gray-400">%50-70 (Orta)</span>
+            <div className="h-3 w-3 rounded-full bg-primary" />
+            <span className="text-muted-foreground">%50-70 (Orta)</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-yellow-500" />
-            <span className="text-gray-400">%30-50 (Düşük)</span>
+            <div className="h-3 w-3 rounded-full bg-amber-500" />
+            <span className="text-muted-foreground">%30-50 (Düşük)</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
-            <span className="text-gray-400">&lt;%30 (Çok Düşük)</span>
+            <div className="h-3 w-3 rounded-full bg-destructive" />
+            <span className="text-muted-foreground">&lt;%30 (Çok Düşük)</span>
           </div>
         </div>
       </div>

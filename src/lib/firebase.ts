@@ -354,4 +354,47 @@ export async function getTeamSeasonData(
   }
 }
 
+// Kullanıcı profil verisi (displayName, profil foto base64)
+const USERS_COLLECTION = 'users';
+
+export interface UserProfile {
+  displayName: string;
+  photoBase64: string | null;
+  updatedAt: string;
+}
+
+export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+  try {
+    const docRef = doc(db, USERS_COLLECTION, uid);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const d = snap.data();
+      return {
+        displayName: d.displayName ?? '',
+        photoBase64: d.photoBase64 ?? null,
+        updatedAt: d.updatedAt ?? '',
+      };
+    }
+    return null;
+  } catch (err) {
+    console.error('getUserProfile:', err);
+    return null;
+  }
+}
+
+export async function setUserProfile(
+  uid: string,
+  data: { displayName?: string; photoBase64?: string | null }
+): Promise<void> {
+  const ref = doc(db, USERS_COLLECTION, uid);
+  const existing = await getDoc(ref);
+  const updatedAt = new Date().toISOString();
+  const payload: Record<string, unknown> = {
+    ...(existing.exists() ? existing.data() : {}),
+    ...data,
+    updatedAt,
+  };
+  await setDoc(ref, payload);
+}
+
 export { db, app, auth };
